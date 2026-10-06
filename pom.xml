@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.orazaka</groupId>
+        <artifactId>orazaka-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../../orazaka-libs/orazaka-build/orazaka-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>orazaka-edge</artifactId>
+    <name>orazaka-edge</name>
+    <description>Orazaka Edge Gateway — strangler facade: route table + streaming reverse proxy (transport only, no business logic)</description>
+
+    <url>https://github.com/krizaka/orazaka-edge</url>
+
+    <scm>
+        <url>https://github.com/krizaka/orazaka-edge</url>
+        <connection>scm:git:https://github.com/krizaka/orazaka-edge.git</connection>
+        <developerConnection>scm:git:git@github.com:krizaka/orazaka-edge.git</developerConnection>
+    </scm>
+
+    <properties>
+        <!-- GitHub Packages repository this artifact is published to (orazaka-parent). -->
+        <orazaka.repository>orazaka-edge</orazaka.repository>
+    </properties>
+
+
+    <dependencies>
+        <!-- Spring MVC + virtual threads (AGENTS.md §4 — no WebFlux, no Spring Cloud Gateway).
+             A parked virtual thread per open SSE stream is the §4-compliant streaming model. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- RestClient over the JDK HttpClient factory — the §4-sanctioned outbound HTTP path
+             (no hand-rolled java.net.http.HttpClient usage outside the Spring-managed factory). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- Distributed tracing (Phase 0 observability baseline). -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.orazaka</groupId>
+            <artifactId>orazaka-test-support</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
