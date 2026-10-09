@@ -57,7 +57,7 @@ class EdgeGovernanceTest {
         .resideInAnyPackage(
             "com.orazaka.core..",
             "com.orazaka.business..",
-            "com.orazaka.identity..",
+            "com.krizaka.users..",
             "com.orazaka.tools..",
             "com.orazaka.interceptor..",
             "com.orazaka.persistence..",
