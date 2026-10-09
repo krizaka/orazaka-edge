@@ -1,7 +1,7 @@
 package com.orazaka.edge.infrastructure.config.filter;
 
+import com.krizaka.security.token.ServiceTokenProvider;
 import com.orazaka.edge.infrastructure.config.EdgeIdentityProperties;
-import com.orazaka.edge.infrastructure.support.ServiceTokenProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

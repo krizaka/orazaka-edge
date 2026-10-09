@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.orazaka</groupId>
+        <groupId>com.krizaka.orazaka</groupId>
         <artifactId>orazaka-parent</artifactId>
         <version>1.0.0-SNAPSHOT</version>
         <relativePath>../../../orazaka-libs/orazaka-build/orazaka-parent/pom.xml</relativePath>
@@ -30,6 +30,11 @@
 
 
     <dependencies>
+        <!-- Krizaka platform kit: session-JWT security baseline and service-to-service tokens. -->
+        <dependency>
+            <groupId>com.krizaka</groupId>
+            <artifactId>krizaka-security</artifactId>
+        </dependency>
         <!-- Spring MVC + virtual threads (AGENTS.md §4 — no WebFlux, no Spring Cloud Gateway).
              A parked virtual thread per open SSE stream is the §4-compliant streaming model. -->
         <dependency>
@@ -63,7 +68,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.orazaka</groupId>
+            <groupId>com.krizaka.orazaka</groupId>
             <artifactId>orazaka-test-support</artifactId>
         </dependency>
         <dependency>
