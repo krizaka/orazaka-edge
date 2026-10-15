@@ -106,7 +106,8 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
       return;
     }
     if (!quota.tryAcquire(apiKey)) {
-      logger.warn("API key over its daily quota: {} {}", request.getMethod(), request.getRequestURI());
+      logger.warn(
+          "API key over its daily quota: {} {}", request.getMethod(), request.getRequestURI());
       response.setStatus(429);
       response.setContentType("application/json");
       response.getWriter().write("{\"error\": \"Daily quota of this API key is reached\"}");

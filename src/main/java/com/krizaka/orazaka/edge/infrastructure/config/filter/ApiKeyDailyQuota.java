@@ -33,8 +33,7 @@ class ApiKeyDailyQuota {
 
   @Autowired
   ApiKeyDailyQuota(
-      @Value("${orazaka.edge.api-key-daily-limit:${AUTH_API_KEY_DAILY_REQUESTS:2000}}")
-          int limit) {
+      @Value("${orazaka.edge.api-key-daily-limit:${AUTH_API_KEY_DAILY_REQUESTS:2000}}") int limit) {
     this(limit, Clock.systemUTC());
   }
 
