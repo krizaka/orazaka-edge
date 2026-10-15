@@ -40,9 +40,11 @@ class ApiKeyExchangeFilterTest {
           exchangeHits.incrementAndGet();
           String body =
               new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-          boolean valid = body.contains("oz_valid");
+          boolean valid = body.contains("oz_valid") || body.contains("oz_scoped");
+          String scopes = body.contains("oz_scoped") ? "[\"ai:embed\"]" : "[]";
           byte[] response =
-              (valid ? "{\"token\":\"minted-jwt\"}" : "{}").getBytes(StandardCharsets.UTF_8);
+              (valid ? "{\"token\":\"minted-jwt\",\"scopes\":" + scopes + "}" : "{}")
+                  .getBytes(StandardCharsets.UTF_8);
           exchange.getResponseHeaders().add("Content-Type", "application/json");
           exchange.sendResponseHeaders(valid ? 200 : 401, response.length);
           try (OutputStream out = exchange.getResponseBody()) {
@@ -128,5 +130,71 @@ class ApiKeyExchangeFilterTest {
 
     assertThat(response.getStatus()).isEqualTo(401);
     assertThat(response.getContentAsString()).contains("Invalid API key");
+  }
+
+  @Test
+  @DisplayName("A key scoped ai:embed reaches POST /api/v1/embeddings with the minted JWT")
+  void scopedKeyReachesItsEndpoint() throws Exception {
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/embeddings");
+    request.addHeader("Authorization", "Bearer oz_scoped_key");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    AtomicReference<String> forwarded = new AtomicReference<>();
+    MockFilterChain chain =
+        new MockFilterChain(
+            new jakarta.servlet.http.HttpServlet() {
+              @Override
+              protected void service(
+                  jakarta.servlet.http.HttpServletRequest req,
+                  jakarta.servlet.http.HttpServletResponse res) {
+                forwarded.set(((HttpServletRequest) req).getHeader("Authorization"));
+              }
+            });
+
+    filter().doFilter(request, response, chain);
+
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(forwarded.get()).isEqualTo("Bearer minted-jwt");
+  }
+
+  @Test
+  @DisplayName("A scoped key is refused 403 anywhere else — the owner's JWT is never forwarded")
+  void scopedKeyRefusedElsewhere() throws Exception {
+    for (String[] call :
+        new String[][] {
+          {"GET", "/api/v1/embeddings"},
+          {"POST", "/api/v1/intent"},
+          {"POST", "/api/v1/embeddings/../chat"},
+          {"GET", "/api/v1/api-keys"},
+          {"DELETE", "/api/v1/profile"}
+        }) {
+      MockHttpServletRequest request = new MockHttpServletRequest(call[0], call[1]);
+      request.addHeader("Authorization", "Bearer oz_scoped_key");
+      MockHttpServletResponse response = new MockHttpServletResponse();
+      AtomicReference<String> forwarded = new AtomicReference<>();
+      MockFilterChain chain =
+          new MockFilterChain(
+              new jakarta.servlet.http.HttpServlet() {
+                @Override
+                protected void service(
+                    jakarta.servlet.http.HttpServletRequest req,
+                    jakarta.servlet.http.HttpServletResponse res) {
+                  forwarded.set("reached");
+                }
+              });
+
+      filter().doFilter(request, response, chain);
+
+      assertThat(response.getStatus()).as(call[0] + " " + call[1]).isEqualTo(403);
+      assertThat(forwarded.get()).isNull();
+    }
+  }
+
+  @Test
+  @DisplayName("A scope the edge does not know grants nothing; no scope keeps the owner's rights")
+  void unknownScopeFailsClosedAndNoScopeIsUnrestricted() {
+    assertThat(ApiKeyScopes.permits(java.util.List.of("ai:rerank"), "POST", "/api/v1/embeddings"))
+        .isFalse();
+    assertThat(ApiKeyScopes.permits(java.util.List.of(), "GET", "/api/v1/jobs")).isTrue();
+    assertThat(ApiKeyScopes.permits(null, "GET", "/api/v1/jobs")).isTrue();
   }
 }

@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -39,7 +40,7 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
   private final RestClient identityClient;
 
   /** Wire shape of the internal exchange response (contract copy — no shared jar). */
-  record ExchangeResponse(String token) {}
+  record ExchangeResponse(String token, List<String> scopes) {}
 
   ApiKeyExchangeFilter(RestClient proxyRestClient, EdgeIdentityProperties properties) {
     Objects.requireNonNull(properties, "EdgeIdentityProperties cannot be null");
@@ -65,9 +66,9 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
       return;
     }
     String apiKey = authorization.substring(BEARER_PREFIX.length());
-    String jwt;
+    ExchangeResponse exchanged;
     try {
-      jwt = exchange(apiKey);
+      exchanged = exchange(apiKey);
     } catch (ResourceAccessException e) {
       logger.warn("API-key exchange unreachable: {}", e.getMessage());
       response.setStatus(502);
@@ -75,17 +76,31 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
       response.getWriter().write("{\"error\": \"Bad Gateway\"}");
       return;
     }
-    if (jwt == null) {
+    if (exchanged == null) {
       response.setStatus(401);
       response.setContentType("application/json");
       response.getWriter().write("{\"error\": \"Invalid API key\"}");
       return;
     }
-    filterChain.doFilter(new AuthorizationRewriter(request, BEARER_PREFIX + jwt), response);
+    // A scoped key is held to its scopes here: the minted JWT is the owner's, so nothing
+    // downstream could tell the difference.
+    if (!ApiKeyScopes.permits(exchanged.scopes(), request.getMethod(), request.getRequestURI())) {
+      logger.warn(
+          "API key scoped {} refused {} {}",
+          exchanged.scopes(),
+          request.getMethod(),
+          request.getRequestURI());
+      response.setStatus(403);
+      response.setContentType("application/json");
+      response.getWriter().write("{\"error\": \"API key scope does not allow this request\"}");
+      return;
+    }
+    filterChain.doFilter(
+        new AuthorizationRewriter(request, BEARER_PREFIX + exchanged.token()), response);
   }
 
   /** Exchanges an API key for a session JWT; {@code null} when the key is invalid/revoked. */
-  private String exchange(String apiKey) {
+  private ExchangeResponse exchange(String apiKey) {
     ExchangeResponse exchanged =
         identityClient
             .post()
@@ -97,7 +112,7 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
                     response.getStatusCode().is2xxSuccessful()
                         ? response.bodyTo(ExchangeResponse.class)
                         : null);
-    return exchanged != null ? exchanged.token() : null;
+    return exchanged != null && exchanged.token() != null ? exchanged : null;
   }
 
   /** Request wrapper substituting the Authorization header with the minted JWT. */
