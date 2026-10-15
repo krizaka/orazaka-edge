@@ -197,4 +197,26 @@ class ApiKeyExchangeFilterTest {
     assertThat(ApiKeyScopes.permits(java.util.List.of(), "GET", "/api/v1/jobs")).isTrue();
     assertThat(ApiKeyScopes.permits(null, "GET", "/api/v1/jobs")).isTrue();
   }
+
+  @Test
+  @DisplayName("A key over its daily quota is refused 429 at the facade; another key is not")
+  void keyOverItsDailyQuotaIsRefused() throws Exception {
+    ApiKeyExchangeFilter filter =
+        new ApiKeyExchangeFilter(
+            RestClient.builder().build(),
+            new EdgeIdentityProperties(
+                URI.create("http://127.0.0.1:" + stub.getAddress().getPort()),
+                "orazaka-test-secret-at-least-32-characters!"),
+            new ApiKeyDailyQuota(2, java.time.Clock.systemUTC()));
+    int[] statuses = new int[4];
+    String[] keys = {"oz_valid_a", "oz_valid_a", "oz_valid_a", "oz_valid_b"};
+    for (int i = 0; i < keys.length; i++) {
+      MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/chat");
+      request.addHeader("Authorization", "Bearer " + keys[i]);
+      MockHttpServletResponse response = new MockHttpServletResponse();
+      filter.doFilter(request, response, new MockFilterChain());
+      statuses[i] = response.getStatus();
+    }
+    assertThat(statuses).containsExactly(200, 200, 429, 200);
+  }
 }

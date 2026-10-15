@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -42,7 +43,16 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
   /** Wire shape of the internal exchange response (contract copy — no shared jar). */
   record ExchangeResponse(String token, List<String> scopes) {}
 
+  private final ApiKeyDailyQuota quota;
+
   ApiKeyExchangeFilter(RestClient proxyRestClient, EdgeIdentityProperties properties) {
+    this(proxyRestClient, properties, ApiKeyDailyQuota.unlimited());
+  }
+
+  @Autowired
+  ApiKeyExchangeFilter(
+      RestClient proxyRestClient, EdgeIdentityProperties properties, ApiKeyDailyQuota quota) {
+    this.quota = Objects.requireNonNull(quota, "ApiKeyDailyQuota cannot be null");
     Objects.requireNonNull(properties, "EdgeIdentityProperties cannot be null");
     ServiceTokenProvider tokens =
         new ServiceTokenProvider(properties.serviceSecret(), "orazaka-edge");
@@ -93,6 +103,14 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
       response.setStatus(403);
       response.setContentType("application/json");
       response.getWriter().write("{\"error\": \"API key scope does not allow this request\"}");
+      return;
+    }
+    if (!quota.tryAcquire(apiKey)) {
+      logger.warn(
+          "API key over its daily quota: {} {}", request.getMethod(), request.getRequestURI());
+      response.setStatus(429);
+      response.setContentType("application/json");
+      response.getWriter().write("{\"error\": \"Daily quota of this API key is reached\"}");
       return;
     }
     filterChain.doFilter(
