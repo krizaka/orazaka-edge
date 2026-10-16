@@ -2,6 +2,7 @@ package com.krizaka.orazaka.edge.architecture;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import com.krizaka.orazaka.test.architecture.ConfigBindingRules;
 import com.krizaka.orazaka.test.architecture.GovernanceRules;
@@ -43,47 +44,59 @@ class EdgeGovernanceTest {
   @Test
   @DisplayName("[DOOR-001] no inbound HTTP entry dispatches a job")
   void noInboundEntryDispatchesAJob() {
-    RunSurfaceRules.assertNoInboundEntryDispatchesAJob();
+    assertDoesNotThrow(
+        () -> {
+          RunSurfaceRules.assertNoInboundEntryDispatchesAJob();
+        });
   }
 
   @Test
   @DisplayName("[EDGE-001] The edge never depends on the framework libraries")
   void edgeNeverDependsOnFrameworkLibraries() {
-    noClasses()
-        .that()
-        .resideInAPackage("com.krizaka.orazaka.edge..")
-        .should()
-        .dependOnClassesThat()
-        .resideInAnyPackage(
-            "com.krizaka.orazaka.core..",
-            "com.krizaka.orazaka.business..",
-            "com.krizaka.users..",
-            "com.krizaka.orazaka.tools..",
-            "com.krizaka.orazaka.interceptor..",
-            "com.krizaka.orazaka.persistence..",
-            "com.krizaka.orazaka.conversationservice..")
-        .because(
-            "The edge is a transport-only facade in front of the constellation — it talks to"
-                + " backends over HTTP, never in-process")
-        .check(edgeClasses);
+    assertDoesNotThrow(
+        () -> {
+          noClasses()
+              .that()
+              .resideInAPackage("com.krizaka.orazaka.edge..")
+              .should()
+              .dependOnClassesThat()
+              .resideInAnyPackage(
+                  "com.krizaka.orazaka.core..",
+                  "com.krizaka.orazaka.business..",
+                  "com.krizaka.users..",
+                  "com.krizaka.orazaka.tools..",
+                  "com.krizaka.orazaka.interceptor..",
+                  "com.krizaka.orazaka.persistence..",
+                  "com.krizaka.orazaka.conversationservice..")
+              .because(
+                  "The edge is a transport-only facade in front of the constellation — it talks to"
+                      + " backends over HTTP, never in-process")
+              .check(edgeClasses);
+        });
   }
 
   @Test
   @DisplayName("[GOV-001] No anonymous classes in edge production code")
   void noAnonymousClassesInProduction() {
-    classes()
-        .that()
-        .resideInAPackage("com.krizaka.orazaka.edge..")
-        .should()
-        .notBeAnonymousClasses()
-        .because("Anonymous classes are banned in production — use named types or lambdas")
-        .check(edgeClasses);
+    assertDoesNotThrow(
+        () -> {
+          classes()
+              .that()
+              .resideInAPackage("com.krizaka.orazaka.edge..")
+              .should()
+              .notBeAnonymousClasses()
+              .because("Anonymous classes are banned in production — use named types or lambdas")
+              .check(edgeClasses);
+        });
   }
 
   @Test
   @DisplayName("[GOV-003] No banned literals in edge sources")
   void noBannedLiteralsInSources() {
-    SourceFileScanner.assertNoBannedLiterals(Path.of("src/main/java"));
+    assertDoesNotThrow(
+        () -> {
+          SourceFileScanner.assertNoBannedLiterals(Path.of("src/main/java"));
+        });
   }
 
   // GOV-006: [ADR-035] permitAll rule is not invoked here: the edge has no SecurityConfig by design
@@ -94,57 +107,84 @@ class EdgeGovernanceTest {
   @Test
   @DisplayName("[ADR-035] /internal/v1 demands the SERVICE authority, not merely authentication")
   void internalSurfaceDemandsServiceAuthority() {
-    GovernanceRules.assertInternalSurfaceRequiresServiceAuthority(
-        Path.of(System.getProperty("user.dir"), "src", "main", "java"));
+    assertDoesNotThrow(
+        () -> {
+          GovernanceRules.assertInternalSurfaceRequiresServiceAuthority(
+              Path.of(System.getProperty("user.dir"), "src", "main", "java"));
+        });
   }
 
   @Test
   @DisplayName("[AGENTS.md §4] requests run on virtual threads")
   void requestsRunOnVirtualThreads() {
-    GovernanceRules.assertVirtualThreadsEnabled(Path.of(System.getProperty("user.dir")));
+    assertDoesNotThrow(
+        () -> {
+          GovernanceRules.assertVirtualThreadsEnabled(Path.of(System.getProperty("user.dir")));
+        });
   }
 
   @Test
   @DisplayName("[PACK-002] no pack, studio or pack-capability key is a literal in engine code")
   void noPackKeyLiteralsInEngineCode() {
-    GovernanceRules.assertNoPackKeyLiterals(REPOSITORY_ROOT);
+    assertDoesNotThrow(
+        () -> {
+          GovernanceRules.assertNoPackKeyLiterals(REPOSITORY_ROOT);
+        });
   }
 
   @Test
   @DisplayName("[PACK-003] engine code never branches on a pack identifier")
   void noPackKeyConditionalsInEngineCode() {
-    GovernanceRules.assertNoPackKeyConditionals(REPOSITORY_ROOT);
+    assertDoesNotThrow(
+        () -> {
+          GovernanceRules.assertNoPackKeyConditionals(REPOSITORY_ROOT);
+        });
   }
 
   @Test
   @DisplayName("[EXEC-001] every in-process capability's handler_key has an executor")
   void everyCapabilityHasAnExecutor() {
-    GovernanceRules.assertEveryCapabilityHasAnExecutor(REPOSITORY_ROOT);
+    assertDoesNotThrow(
+        () -> {
+          GovernanceRules.assertEveryCapabilityHasAnExecutor(REPOSITORY_ROOT);
+        });
   }
 
   @Test
   @DisplayName("[EXEC-002] every capability's routing_key is drained by a declared worker")
   void everyCapabilityIsDrained() {
-    GovernanceRules.assertEveryCapabilityIsDrained(REPOSITORY_ROOT);
+    assertDoesNotThrow(
+        () -> {
+          GovernanceRules.assertEveryCapabilityIsDrained(REPOSITORY_ROOT);
+        });
   }
 
   @Test
   @DisplayName(
       "[CFG-001] every type the configuration binder builds has a constructor it can choose")
   void configurationBindsUnambiguously() {
-    ConfigBindingRules.assertConfigurationBindsUnambiguously();
-    ConfigBindingRules.assertInjectableComponentsHaveOneConstructor();
+    assertDoesNotThrow(
+        () -> {
+          ConfigBindingRules.assertConfigurationBindsUnambiguously();
+          ConfigBindingRules.assertInjectableComponentsHaveOneConstructor();
+        });
   }
 
   @Test
   @DisplayName("[ERR-113] No Environment injection in production beans")
   void noEnvironmentInjection() {
-    SourceFileScanner.assertNoEnvironmentInjection(Path.of("src", "main", "java"));
+    assertDoesNotThrow(
+        () -> {
+          SourceFileScanner.assertNoEnvironmentInjection(Path.of("src", "main", "java"));
+        });
   }
 
   /** [LOG-001] no logging call takes a prompt, a response body or a message text (ADR-064). */
   @Test
   void noLoggingCallTakesContent() {
-    LoggedContentRules.assertNoLoggingCallTakesContent();
+    assertDoesNotThrow(
+        () -> {
+          LoggedContentRules.assertNoLoggingCallTakesContent();
+        });
   }
 }
