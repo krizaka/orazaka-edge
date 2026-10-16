@@ -56,6 +56,10 @@ orazaka:
       # back to the '/' catch-all, exactly as ADR-032 intends.
       - path-prefix: /api/v1/studios
         target: ${STUDIO_INTERNAL_URL:http://localhost:8096}
+      # The recommender (ADR-078): a product's service key feeds it and reads its feeds. Served
+      # by the knowledge service (pgvector); its /internal/v1 surface stays unrouted.
+      - path-prefix: /api/v1/recommendations
+        target: ${KNOWLEDGE_INTERNAL_URL:http://localhost:8084}
 
 management:
   # The edge's own actuator lives on a dedicated management port so the main
