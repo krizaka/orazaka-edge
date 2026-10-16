@@ -18,7 +18,20 @@ final class ApiKeyScopes {
   private static final Map<String, List<Rule>> RULES =
       Map.of(
           // Texts to vectors with the platform's embedding model — nothing else.
-          "ai:embed", List.of(new Rule("POST", "/api/v1/embeddings")));
+          "ai:embed",
+          List.of(new Rule("POST", "/api/v1/embeddings")),
+          // A product feeding its recommender (ADR-078): events, eligible items, erasures.
+          "reco:sync",
+          List.of(
+              new Rule("POST", "/api/v1/recommendations/events"),
+              new Rule("POST", "/api/v1/recommendations/items"),
+              new Rule("POST", "/api/v1/recommendations/erasures")),
+          // A product reading its recommender: feeds and creator analytics.
+          "reco:read",
+          List.of(
+              new Rule("GET", "/api/v1/recommendations/for-you"),
+              new Rule("GET", "/api/v1/recommendations/similar"),
+              new Rule("GET", "/api/v1/recommendations/insights")));
 
   private ApiKeyScopes() {}
 

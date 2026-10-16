@@ -190,6 +190,27 @@ class ApiKeyExchangeFilterTest {
   }
 
   @Test
+  @DisplayName(
+      "reco:sync feeds the recommender, reco:read reads it — and neither reaches anything else")
+  void recommendationScopes() {
+    java.util.List<String> sync = java.util.List.of("reco:sync");
+    java.util.List<String> read = java.util.List.of("reco:read");
+    assertThat(ApiKeyScopes.permits(sync, "POST", "/api/v1/recommendations/events")).isTrue();
+    assertThat(ApiKeyScopes.permits(sync, "POST", "/api/v1/recommendations/items")).isTrue();
+    assertThat(ApiKeyScopes.permits(sync, "POST", "/api/v1/recommendations/erasures")).isTrue();
+    assertThat(ApiKeyScopes.permits(sync, "GET", "/api/v1/recommendations/for-you")).isFalse();
+    assertThat(ApiKeyScopes.permits(read, "GET", "/api/v1/recommendations/for-you")).isTrue();
+    assertThat(ApiKeyScopes.permits(read, "GET", "/api/v1/recommendations/similar")).isTrue();
+    assertThat(ApiKeyScopes.permits(read, "GET", "/api/v1/recommendations/insights")).isTrue();
+    assertThat(ApiKeyScopes.permits(read, "POST", "/api/v1/recommendations/events")).isFalse();
+    assertThat(ApiKeyScopes.permits(read, "GET", "/api/v1/jobs")).isFalse();
+    java.util.List<String> product = java.util.List.of("ai:embed", "reco:sync", "reco:read");
+    assertThat(ApiKeyScopes.permits(product, "POST", "/api/v1/embeddings")).isTrue();
+    assertThat(ApiKeyScopes.permits(product, "GET", "/api/v1/recommendations/for-you")).isTrue();
+    assertThat(ApiKeyScopes.permits(product, "POST", "/api/v1/chat")).isFalse();
+  }
+
+  @Test
   @DisplayName("A scope the edge does not know grants nothing; no scope keeps the owner's rights")
   void unknownScopeFailsClosedAndNoScopeIsUnrestricted() {
     assertThat(ApiKeyScopes.permits(java.util.List.of("ai:rerank"), "POST", "/api/v1/embeddings"))
