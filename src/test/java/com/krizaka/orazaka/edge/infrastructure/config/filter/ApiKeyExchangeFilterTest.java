@@ -211,6 +211,22 @@ class ApiKeyExchangeFilterTest {
   }
 
   @Test
+  @DisplayName(
+      "analytics:sync sends product events, analytics:read reads insights (ADR-081) — nothing else")
+  void analyticsScopes() {
+    java.util.List<String> sync = java.util.List.of("analytics:sync");
+    java.util.List<String> read = java.util.List.of("analytics:read");
+    assertThat(ApiKeyScopes.permits(sync, "POST", "/api/v1/analytics/events")).isTrue();
+    assertThat(ApiKeyScopes.permits(sync, "POST", "/api/v1/analytics/erasures")).isTrue();
+    assertThat(ApiKeyScopes.permits(sync, "GET", "/api/v1/analytics/insights")).isFalse();
+    assertThat(ApiKeyScopes.permits(read, "GET", "/api/v1/analytics/insights")).isTrue();
+    assertThat(ApiKeyScopes.permits(read, "GET", "/api/v1/analytics/funnel")).isTrue();
+    assertThat(ApiKeyScopes.permits(read, "POST", "/api/v1/analytics/events")).isFalse();
+    assertThat(ApiKeyScopes.permits(read, "GET", "/api/v1/recommendations/for-you")).isFalse();
+    assertThat(ApiKeyScopes.permits(sync, "POST", "/api/v1/recommendations/events")).isFalse();
+  }
+
+  @Test
   @DisplayName("A scope the edge does not know grants nothing; no scope keeps the owner's rights")
   void unknownScopeFailsClosedAndNoScopeIsUnrestricted() {
     assertThat(ApiKeyScopes.permits(java.util.List.of("ai:rerank"), "POST", "/api/v1/embeddings"))

@@ -31,7 +31,17 @@ final class ApiKeyScopes {
           List.of(
               new Rule("GET", "/api/v1/recommendations/for-you"),
               new Rule("GET", "/api/v1/recommendations/similar"),
-              new Rule("GET", "/api/v1/recommendations/insights")));
+              new Rule("GET", "/api/v1/recommendations/insights")),
+          // A product sending its own events to analytics, and forgetting people (ADR-081).
+          "analytics:sync",
+          List.of(
+              new Rule("POST", "/api/v1/analytics/events"),
+              new Rule("POST", "/api/v1/analytics/erasures")),
+          // A product reading its analytics: KPIs, series, top items, cohorts, funnels.
+          "analytics:read",
+          List.of(
+              new Rule("GET", "/api/v1/analytics/insights"),
+              new Rule("GET", "/api/v1/analytics/funnel")));
 
   private ApiKeyScopes() {}
 
