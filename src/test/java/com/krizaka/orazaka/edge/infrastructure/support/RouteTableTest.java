@@ -40,4 +40,11 @@ class RouteTableTest {
     assertThat(routes.resolve("/api/v1/studios")).isEqualTo(URI.create("http://localhost:8096"));
     assertThat(routes.resolve("/api/v1/embeddings")).isEqualTo(URI.create("http://localhost:8080"));
   }
+
+  @Test
+  @DisplayName("/api/v1/analytics reaches the knowledge service (ADR-081)")
+  void analyticsGoesToTheKnowledgeService() throws Exception {
+    assertThat(shipped().resolve("/api/v1/analytics/insights"))
+        .isEqualTo(URI.create("http://localhost:8084"));
+  }
 }

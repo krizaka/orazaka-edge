@@ -60,6 +60,9 @@ orazaka:
       # by the knowledge service (pgvector); its /internal/v1 surface stays unrouted.
       - path-prefix: /api/v1/recommendations
         target: ${KNOWLEDGE_INTERNAL_URL:http://localhost:8084}
+      # Product analytics (ADR-081): events in, insights out — the same knowledge service.
+      - path-prefix: /api/v1/analytics
+        target: ${KNOWLEDGE_INTERNAL_URL:http://localhost:8084}
 
 management:
   # The edge's own actuator lives on a dedicated management port so the main
