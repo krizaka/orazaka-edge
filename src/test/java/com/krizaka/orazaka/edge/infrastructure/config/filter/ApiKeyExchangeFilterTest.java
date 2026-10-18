@@ -42,8 +42,12 @@ class ApiKeyExchangeFilterTest {
               new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
           boolean valid = body.contains("oz_valid") || body.contains("oz_scoped");
           String scopes = body.contains("oz_scoped") ? "[\"ai:embed\"]" : "[]";
+          // The identity service sends the owner's tier with the exchange; a key named
+          // oz_valid_rpm<N> belongs to a tier of N requests per minute.
+          String tier =
+              body.contains("oz_valid_rpm2") ? ",\"tierKey\":\"tiny\",\"requestsPerMinute\":2" : "";
           byte[] response =
-              (valid ? "{\"token\":\"minted-jwt\",\"scopes\":" + scopes + "}" : "{}")
+              (valid ? "{\"token\":\"minted-jwt\",\"scopes\":" + scopes + tier + "}" : "{}")
                   .getBytes(StandardCharsets.UTF_8);
           exchange.getResponseHeaders().add("Content-Type", "application/json");
           exchange.sendResponseHeaders(valid ? 200 : 401, response.length);
@@ -255,5 +259,110 @@ class ApiKeyExchangeFilterTest {
       statuses[i] = response.getStatus();
     }
     assertThat(statuses).containsExactly(200, 200, 429, 200);
+  }
+
+  private ApiKeyExchangeFilter limited(ApiKeyRateLimiter.Mode mode) {
+    return new ApiKeyExchangeFilter(
+        RestClient.builder().build(),
+        new EdgeIdentityProperties(
+            URI.create("http://127.0.0.1:" + stub.getAddress().getPort()),
+            "orazaka-test-secret-at-least-32-characters!"),
+        ApiKeyDailyQuota.unlimited(),
+        new ApiKeyRateLimiter(mode, 600, java.time.Clock.systemUTC()));
+  }
+
+  private static MockHttpServletResponse call(ApiKeyExchangeFilter filter, String key)
+      throws Exception {
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/chat");
+    request.addHeader("Authorization", "Bearer " + key);
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    filter.doFilter(request, response, new MockFilterChain());
+    return response;
+  }
+
+  @Test
+  @DisplayName("[ADR-083] a key over its tier's requests per minute gets 429 with Retry-After")
+  void keyOverItsTierIsRefusedWithRetryAfter() throws Exception {
+    ApiKeyExchangeFilter filter = limited(ApiKeyRateLimiter.Mode.ENFORCE);
+
+    MockHttpServletResponse first = call(filter, "oz_valid_rpm2_a");
+    MockHttpServletResponse second = call(filter, "oz_valid_rpm2_a");
+    MockHttpServletResponse third = call(filter, "oz_valid_rpm2_a");
+    MockHttpServletResponse otherKey = call(filter, "oz_valid_rpm2_b");
+
+    assertThat(first.getStatus()).isEqualTo(200);
+    assertThat(first.getHeader("RateLimit-Limit")).isEqualTo("2");
+    assertThat(first.getHeader("RateLimit-Remaining")).isEqualTo("1");
+    assertThat(second.getStatus()).isEqualTo(200);
+    assertThat(third.getStatus()).isEqualTo(429);
+    assertThat(third.getHeader("Retry-After")).isEqualTo("30");
+    assertThat(third.getContentAsString()).contains("Rate limit").contains("30");
+    assertThat(otherKey.getStatus()).isEqualTo(200);
+  }
+
+  @Test
+  @DisplayName("[ADR-083] observe mode flags the overrun but still lets the call through")
+  void observeModeDoesNotRefuse() throws Exception {
+    ApiKeyExchangeFilter filter = limited(ApiKeyRateLimiter.Mode.OBSERVE);
+
+    call(filter, "oz_valid_rpm2_c");
+    call(filter, "oz_valid_rpm2_c");
+    MockHttpServletResponse third = call(filter, "oz_valid_rpm2_c");
+
+    assertThat(third.getStatus()).isEqualTo(200);
+    assertThat(third.getHeader("Retry-After")).isNull();
+    assertThat(third.getHeader("RateLimit-Remaining")).isEqualTo("0");
+  }
+
+  @Test
+  @DisplayName(
+      "[ADR-083] a refused call never reaches the backend and never spends the daily quota")
+  void refusedCallDoesNotSpendTheDailyQuota() throws Exception {
+    ApiKeyDailyQuota quota = new ApiKeyDailyQuota(3, java.time.Clock.systemUTC());
+    ApiKeyExchangeFilter filter =
+        new ApiKeyExchangeFilter(
+            RestClient.builder().build(),
+            new EdgeIdentityProperties(
+                URI.create("http://127.0.0.1:" + stub.getAddress().getPort()),
+                "orazaka-test-secret-at-least-32-characters!"),
+            quota,
+            new ApiKeyRateLimiter(
+                ApiKeyRateLimiter.Mode.ENFORCE, 600, java.time.Clock.systemUTC()));
+
+    call(filter, "oz_valid_rpm2_d");
+    call(filter, "oz_valid_rpm2_d");
+    for (int i = 0; i < 5; i++) {
+      assertThat(call(filter, "oz_valid_rpm2_d").getStatus()).isEqualTo(429);
+    }
+
+    // Two calls spent two of three: one is left.
+    assertThat(quota.tryAcquire("oz_valid_rpm2_d")).isTrue();
+    assertThat(quota.tryAcquire("oz_valid_rpm2_d")).isFalse();
+  }
+
+  @Test
+  @DisplayName("[ADR-083] a key without a tier from the identity service uses the edge default")
+  void noTierUsesTheDefault() throws Exception {
+    ApiKeyExchangeFilter filter = limited(ApiKeyRateLimiter.Mode.ENFORCE);
+
+    assertThat(call(filter, "oz_valid_plain").getHeader("RateLimit-Limit")).isEqualTo("600");
+  }
+
+  @Test
+  @DisplayName("[ADR-083] the daily quota's 429 also says when to come back")
+  void dailyQuotaAnswersRetryAfter() throws Exception {
+    ApiKeyExchangeFilter filter =
+        new ApiKeyExchangeFilter(
+            RestClient.builder().build(),
+            new EdgeIdentityProperties(
+                URI.create("http://127.0.0.1:" + stub.getAddress().getPort()),
+                "orazaka-test-secret-at-least-32-characters!"),
+            new ApiKeyDailyQuota(1, java.time.Clock.systemUTC()));
+
+    call(filter, "oz_valid_daily");
+    MockHttpServletResponse refused = call(filter, "oz_valid_daily");
+
+    assertThat(refused.getStatus()).isEqualTo(429);
+    assertThat(Long.parseLong(refused.getHeader("Retry-After"))).isBetween(1L, 86_400L);
   }
 }
