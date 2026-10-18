@@ -41,18 +41,29 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
   private final RestClient identityClient;
 
   /** Wire shape of the internal exchange response (contract copy — no shared jar). */
-  record ExchangeResponse(String token, List<String> scopes) {}
+  record ExchangeResponse(
+      String token, List<String> scopes, String tierKey, Integer requestsPerMinute) {}
 
   private final ApiKeyDailyQuota quota;
+  private final ApiKeyRateLimiter rateLimiter;
 
   ApiKeyExchangeFilter(RestClient proxyRestClient, EdgeIdentityProperties properties) {
     this(proxyRestClient, properties, ApiKeyDailyQuota.unlimited());
   }
 
-  @Autowired
   ApiKeyExchangeFilter(
       RestClient proxyRestClient, EdgeIdentityProperties properties, ApiKeyDailyQuota quota) {
+    this(proxyRestClient, properties, quota, ApiKeyRateLimiter.off());
+  }
+
+  @Autowired
+  ApiKeyExchangeFilter(
+      RestClient proxyRestClient,
+      EdgeIdentityProperties properties,
+      ApiKeyDailyQuota quota,
+      ApiKeyRateLimiter rateLimiter) {
     this.quota = Objects.requireNonNull(quota, "ApiKeyDailyQuota cannot be null");
+    this.rateLimiter = Objects.requireNonNull(rateLimiter, "ApiKeyRateLimiter cannot be null");
     Objects.requireNonNull(properties, "EdgeIdentityProperties cannot be null");
     ServiceTokenProvider tokens =
         new ServiceTokenProvider(properties.serviceSecret(), "orazaka-edge");
@@ -105,10 +116,38 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
       response.getWriter().write("{\"error\": \"API key scope does not allow this request\"}");
       return;
     }
+    if (rateLimiter.active()) {
+      ApiKeyRateLimiter.Decision decision =
+          rateLimiter.tryAcquire(apiKey, exchanged.requestsPerMinute());
+      response.setHeader("RateLimit-Limit", String.valueOf(decision.limit()));
+      response.setHeader("RateLimit-Remaining", String.valueOf(decision.remaining()));
+      if (decision.overLimit()) {
+        logger.warn(
+            "API key over its {} requests/minute ({}): {} {}{}",
+            decision.limit(),
+            exchanged.tierKey(),
+            request.getMethod(),
+            request.getRequestURI(),
+            decision.allowed() ? " — observed, not refused" : "");
+      }
+      if (!decision.allowed()) {
+        response.setStatus(429);
+        response.setHeader("Retry-After", String.valueOf(decision.retryAfterSeconds()));
+        response.setContentType("application/json");
+        response
+            .getWriter()
+            .write(
+                "{\"error\": \"Rate limit of this API key is reached\", \"retryAfterSeconds\": "
+                    + decision.retryAfterSeconds()
+                    + "}");
+        return;
+      }
+    }
     if (!quota.tryAcquire(apiKey)) {
       logger.warn(
           "API key over its daily quota: {} {}", request.getMethod(), request.getRequestURI());
       response.setStatus(429);
+      response.setHeader("Retry-After", String.valueOf(quota.secondsUntilReset()));
       response.setContentType("application/json");
       response.getWriter().write("{\"error\": \"Daily quota of this API key is reached\"}");
       return;

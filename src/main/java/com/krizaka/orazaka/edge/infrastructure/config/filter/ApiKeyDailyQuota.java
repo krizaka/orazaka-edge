@@ -1,12 +1,9 @@
 package com.krizaka.orazaka.edge.infrastructure.config.filter;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -58,17 +55,16 @@ class ApiKeyDailyQuota {
         day = today;
       }
     }
-    return counts.computeIfAbsent(digest(apiKey), k -> new AtomicInteger()).incrementAndGet()
+    return counts.computeIfAbsent(KeyDigest.of(apiKey), k -> new AtomicInteger()).incrementAndGet()
         <= limit;
   }
 
-  private static String digest(String apiKey) {
-    try {
-      return HexFormat.of()
-          .formatHex(
-              MessageDigest.getInstance("SHA-256").digest(apiKey.getBytes(StandardCharsets.UTF_8)));
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
+  /**
+   * Seconds until 00:00 UTC, when the day's counts start again: the {@code Retry-After} of a 429.
+   */
+  long secondsUntilReset() {
+    LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
+    java.time.Instant midnight = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+    return Math.max(1L, Duration.between(clock.instant(), midnight).toSeconds());
   }
 }

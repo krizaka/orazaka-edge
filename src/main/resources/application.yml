@@ -26,6 +26,13 @@ orazaka:
       # Shared HS256 secret, used to mint the SERVICE token /internal/v1 now requires
       # (ADR-035). Same value every host validates with; never a second secret.
       service-secret: ${IDENTITY_JWT_SECRET:orazaka-local-dev-identity-jwt-secret-256bit!}
+    # Requests per minute per oz_ service key (ADR-083). The limit is the key owner's tier in the
+    # identity database (rate_limits.requests_per_minute), sent with the key exchange. Roll out like
+    # the billing enforcement: observe (count, flag in the logs, never refuse) -> enforce (429 with
+    # Retry-After). The default applies when the identity service sends no tier.
+    rate-limit:
+      mode: ${ABUSE_RATE_LIMIT_MODE:observe}
+      default-requests-per-minute: ${ABUSE_RATE_LIMIT_DEFAULT_RPM:600}
     routes:
       - path-prefix: /
         target: ${ROUTER_INTERNAL_URL:http://localhost:8080}
