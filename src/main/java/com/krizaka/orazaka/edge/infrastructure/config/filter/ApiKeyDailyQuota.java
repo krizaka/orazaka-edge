@@ -7,6 +7,7 @@ import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -25,8 +26,14 @@ class ApiKeyDailyQuota {
 
   private final int limit;
   private final Clock clock;
-  private final Map<String, AtomicInteger> counts = new ConcurrentHashMap<>();
-  private volatile LocalDate day;
+
+  /**
+   * One UTC day's counters: swapped whole at midnight, so no lock is held (virtual threads must not
+   * pin).
+   */
+  private record Day(LocalDate date, Map<String, AtomicInteger> counts) {}
+
+  private final AtomicReference<Day> current = new AtomicReference<>();
 
   @Autowired
   ApiKeyDailyQuota(
@@ -49,13 +56,18 @@ class ApiKeyDailyQuota {
       return true;
     }
     LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
-    synchronized (this) {
-      if (!today.equals(day)) {
-        counts.clear();
-        day = today;
+    Day day = current.get();
+    while (day == null || day.date().isBefore(today)) {
+      Day fresh = new Day(today, new ConcurrentHashMap<>());
+      if (current.compareAndSet(day, fresh)) {
+        day = fresh;
+      } else {
+        day = current.get();
       }
     }
-    return counts.computeIfAbsent(KeyDigest.of(apiKey), k -> new AtomicInteger()).incrementAndGet()
+    return day.counts()
+            .computeIfAbsent(KeyDigest.of(apiKey), k -> new AtomicInteger())
+            .incrementAndGet()
         <= limit;
   }
 

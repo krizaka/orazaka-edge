@@ -53,6 +53,14 @@ public class ProxyController {
 
   private static final int STREAM_BUFFER_BYTES = 8192;
 
+  /**
+   * RFC 9457 problem details of a backend that cannot be reached; {@code error} is kept for older
+   * clients.
+   */
+  private static final String BAD_GATEWAY_PROBLEM =
+      "{\"type\":\"about:blank\",\"title\":\"Bad Gateway\",\"status\":502,"
+          + "\"detail\":\"The service behind the edge cannot be reached.\",\"error\":\"Bad Gateway\"}";
+
   private final RestClient proxyRestClient;
   private final RouteResolver routeResolver;
 
@@ -83,8 +91,8 @@ public class ProxyController {
       logger.warn("Backend unreachable for {} {}: {}", request.getMethod(), target, e.getMessage());
       if (!response.isCommitted()) {
         response.setStatus(502);
-        response.setContentType("application/json");
-        response.getWriter().write("{\"error\": \"Bad Gateway\"}");
+        response.setContentType("application/problem+json");
+        response.getWriter().write(BAD_GATEWAY_PROBLEM);
       }
     } catch (UncheckedIOException e) {
       // Client disconnected mid-stream (SSE tab closed) — nothing left to relay.
@@ -96,7 +104,11 @@ public class ProxyController {
     URI backend = routeResolver.resolve(request.getRequestURI());
     String query = request.getQueryString();
     String pathAndQuery = request.getRequestURI() + (query != null ? "?" + query : "");
-    return URI.create(backend.toString().replaceAll("/$", "") + pathAndQuery);
+    String base = backend.toString();
+    if (base.endsWith("/")) {
+      base = base.substring(0, base.length() - 1);
+    }
+    return URI.create(base + pathAndQuery);
   }
 
   private void copyRequestHeaders(HttpServletRequest request, HeaderSink sink) {
