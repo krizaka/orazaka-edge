@@ -70,6 +70,16 @@ orazaka:
       # Product analytics (ADR-081): events in, insights out — the same knowledge service.
       - path-prefix: /api/v1/analytics
         target: ${KNOWLEDGE_INTERNAL_URL:http://localhost:8084}
+      # Cloud automations (ADR-084): the owner's automations, triggers and run history, behind the
+      # session JWT or an oz_ key like every /api/v1 route. Its /internal/v1 surface stays unrouted.
+      - path-prefix: /api/v1/automations
+        target: ${AUTOMATION_INTERNAL_URL:http://localhost:8091}
+      # The signed inbound webhook (ADR-084, the amendment of ADR-035): the one route a caller reaches
+      # with no session and no key. The edge authenticates nothing here and forwards headers and body
+      # untouched; the automation service verifies the signature before any work. Only this prefix:
+      # nothing else of the service is reachable without a token.
+      - path-prefix: /hooks/
+        target: ${AUTOMATION_INTERNAL_URL:http://localhost:8091}
 
 management:
   # The edge's own actuator lives on a dedicated management port so the main
