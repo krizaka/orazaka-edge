@@ -47,4 +47,25 @@ class RouteTableTest {
     assertThat(shipped().resolve("/api/v1/analytics/insights"))
         .isEqualTo(URI.create("http://localhost:8084"));
   }
+
+  @Test
+  @DisplayName(
+      "/api/v1/automations and the signed webhook /hooks reach the automation service (ADR-084)")
+  void automationsGoToTheAutomationService() throws Exception {
+    RouteResolver routes = shipped();
+    URI automation = URI.create("http://localhost:8091");
+    assertThat(routes.resolve("/api/v1/automations")).isEqualTo(automation);
+    assertThat(routes.resolve("/api/v1/automations/6f1c2b1e-0000-4000-8000-000000000001/triggers"))
+        .isEqualTo(automation);
+    assertThat(routes.resolve("/hooks/6f1c2b1e-0000-4000-8000-000000000001")).isEqualTo(automation);
+  }
+
+  @Test
+  @DisplayName(
+      "the automation service's internal surface is never routed: /internal stays on the catch-all")
+  void internalIsNotRoutedToAutomation() throws Exception {
+    assertThat(shipped().resolve("/internal/v1/anything"))
+        .as("only the '/' catch-all, never the automation service")
+        .isNotEqualTo(URI.create("http://localhost:8091"));
+  }
 }

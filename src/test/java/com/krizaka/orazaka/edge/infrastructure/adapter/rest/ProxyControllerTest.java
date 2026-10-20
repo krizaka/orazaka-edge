@@ -141,4 +141,34 @@ class ProxyControllerTest {
 
     assertThat(response.statusCode()).isEqualTo(418);
   }
+
+  @Test
+  @DisplayName(
+      "A signed webhook crosses the edge untouched: same bytes, same webhook-* headers, no credential added (ADR-084)")
+  void signedWebhookIsForwardedVerbatim() throws Exception {
+    // The signature covers the body byte for byte: multi-byte characters and trailing whitespace
+    // must survive.
+    String body = "{\"note\":\"réservé — 100 %\",\"n\":[1, 2]}  \n";
+    HttpResponse<String> response =
+        client.send(
+            HttpRequest.newBuilder(edge("/hooks/6f1c2b1e-0000-4000-8000-000000000001"))
+                .header("Content-Type", "application/json")
+                .header("webhook-id", "msg_p5jXN8AQM9LWM0D4loKWxJek")
+                .header("webhook-timestamp", "1614265330")
+                .header("webhook-signature", "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(lastRequestPath).isEqualTo("/hooks/6f1c2b1e-0000-4000-8000-000000000001");
+    assertThat(lastRequestBody).isEqualTo(body);
+    assertThat(lastRequestHeaders)
+        .containsEntry("Webhook-id", "msg_p5jXN8AQM9LWM0D4loKWxJek")
+        .containsEntry("Webhook-timestamp", "1614265330")
+        .containsEntry("Webhook-signature", "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=");
+    assertThat(lastRequestHeaders)
+        .as("the edge authenticates nothing here and adds no credential")
+        .doesNotContainKey("Authorization");
+  }
 }
