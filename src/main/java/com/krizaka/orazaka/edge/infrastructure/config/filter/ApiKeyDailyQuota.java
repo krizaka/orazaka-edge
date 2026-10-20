@@ -4,10 +4,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,8 +11,9 @@ import org.springframework.stereotype.Component;
 /**
  * Daily request quota per service token ({@code oz_} key): a key that is leaked or looping spends
  * at most {@code limit} calls a UTC day, then answers {@code 429} until 00:00 UTC. Keys are held as
- * SHA-256 digests, never in clear; counters live in memory (a restart gives the day back — the
- * global spend budget of the engine is the backstop).
+ * SHA-256 digests, never in clear; counters live in memory per instance (a restart gives the day
+ * back — the global spend budget of the engine is the backstop) or, with {@code
+ * ABUSE_RATE_LIMIT_STORE=redis}, in Redis shared by every edge instance (ADR-083 slice 3).
  *
  * <p>{@code orazaka.edge.api-key-daily-limit} (env {@code AUTH_API_KEY_DAILY_REQUESTS}, default
  * 2000); a negative value switches the quota off.
@@ -26,24 +23,23 @@ class ApiKeyDailyQuota {
 
   private final int limit;
   private final Clock clock;
-
-  /**
-   * One UTC day's counters: swapped whole at midnight, so no lock is held (virtual threads must not
-   * pin).
-   */
-  private record Day(LocalDate date, Map<String, AtomicInteger> counts) {}
-
-  private final AtomicReference<Day> current = new AtomicReference<>();
+  private final DailyCounterStore store;
 
   @Autowired
   ApiKeyDailyQuota(
-      @Value("${orazaka.edge.api-key-daily-limit:${AUTH_API_KEY_DAILY_REQUESTS:2000}}") int limit) {
-    this(limit, Clock.systemUTC());
+      @Value("${orazaka.edge.api-key-daily-limit:${AUTH_API_KEY_DAILY_REQUESTS:2000}}") int limit,
+      DailyCounterStore store) {
+    this(limit, Clock.systemUTC(), store);
   }
 
   ApiKeyDailyQuota(int limit, Clock clock) {
+    this(limit, clock, new InMemoryDailyCounterStore());
+  }
+
+  ApiKeyDailyQuota(int limit, Clock clock, DailyCounterStore store) {
     this.limit = limit;
     this.clock = clock;
+    this.store = java.util.Objects.requireNonNull(store, "DailyCounterStore cannot be null");
   }
 
   static ApiKeyDailyQuota unlimited() {
@@ -56,19 +52,7 @@ class ApiKeyDailyQuota {
       return true;
     }
     LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
-    Day day = current.get();
-    while (day == null || day.date().isBefore(today)) {
-      Day fresh = new Day(today, new ConcurrentHashMap<>());
-      if (current.compareAndSet(day, fresh)) {
-        day = fresh;
-      } else {
-        day = current.get();
-      }
-    }
-    return day.counts()
-            .computeIfAbsent(KeyDigest.of(apiKey), k -> new AtomicInteger())
-            .incrementAndGet()
-        <= limit;
+    return store.increment(KeyDigest.of(apiKey), today) <= limit;
   }
 
   /**
