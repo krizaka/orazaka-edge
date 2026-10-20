@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -81,6 +82,19 @@ class ProxyControllerTest {
     registry.add(
         "orazaka.edge.routes[0].target",
         () -> "http://127.0.0.1:" + stubBackend.getAddress().getPort());
+    registry.add("orazaka.edge.routes[1].path-prefix", () -> "/down");
+    registry.add("orazaka.edge.routes[1].target", () -> "http://127.0.0.1:" + DEAD_PORT);
+  }
+
+  /** A port nothing listens on: a backend that is down. */
+  private static final int DEAD_PORT = closedPort();
+
+  private static int closedPort() {
+    try (ServerSocket socket = new ServerSocket(0)) {
+      return socket.getLocalPort();
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
   }
 
   private URI edge(String pathAndQuery) {
@@ -170,5 +184,25 @@ class ProxyControllerTest {
     assertThat(lastRequestHeaders)
         .as("the edge authenticates nothing here and adds no credential")
         .doesNotContainKey("Authorization");
+  }
+
+  @Test
+  @DisplayName(
+      "An unreachable backend answers 502 as RFC 9457 problem details (and keeps the legacy error member)")
+  void unreachableBackendIsProblemDetails() throws Exception {
+    HttpResponse<String> response =
+        client.send(
+            HttpRequest.newBuilder(edge("/down/api/v1/anything")).GET().build(),
+            HttpResponse.BodyHandlers.ofString());
+
+    assertThat(response.statusCode()).isEqualTo(502);
+    assertThat(response.headers().firstValue("Content-Type"))
+        .hasValueSatisfying(type -> assertThat(type).startsWith("application/problem+json"));
+    assertThat(response.body())
+        .contains("\"type\":\"about:blank\"")
+        .contains("\"title\":\"Bad Gateway\"")
+        .contains("\"status\":502")
+        .contains("\"detail\":")
+        .contains("\"error\":\"Bad Gateway\"");
   }
 }
