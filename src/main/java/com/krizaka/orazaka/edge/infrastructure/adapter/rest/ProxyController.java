@@ -1,5 +1,6 @@
 package com.krizaka.orazaka.edge.infrastructure.adapter.rest;
 
+import com.krizaka.orazaka.edge.infrastructure.config.filter.RequestIdFilter;
 import com.krizaka.orazaka.edge.infrastructure.support.RouteResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -113,12 +114,18 @@ public class ProxyController {
 
   private void copyRequestHeaders(HttpServletRequest request, HeaderSink sink) {
     for (String name : Collections.list(request.getHeaderNames())) {
-      if (HOP_BY_HOP_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+      if (HOP_BY_HOP_HEADERS.contains(name.toLowerCase(Locale.ROOT))
+          || RequestIdFilter.HEADER.equalsIgnoreCase(name)) {
         continue;
       }
       for (String value : Collections.list(request.getHeaders(name))) {
         sink.add(name, value);
       }
+    }
+    // The one id of this request (RequestIdFilter): the caller's when well-formed, else generated.
+    Object requestId = request.getAttribute(RequestIdFilter.ATTRIBUTE);
+    if (requestId != null) {
+      sink.add(RequestIdFilter.HEADER, requestId.toString());
     }
     String existingForwardedFor = request.getHeader("X-Forwarded-For");
     sink.add(
@@ -139,7 +146,8 @@ public class ProxyController {
         .getHeaders()
         .forEach(
             (name, values) -> {
-              if (!HOP_BY_HOP_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+              if (!HOP_BY_HOP_HEADERS.contains(name.toLowerCase(Locale.ROOT))
+                  && !RequestIdFilter.HEADER.equalsIgnoreCase(name)) {
                 values.forEach(value -> response.addHeader(name, value));
               }
             });

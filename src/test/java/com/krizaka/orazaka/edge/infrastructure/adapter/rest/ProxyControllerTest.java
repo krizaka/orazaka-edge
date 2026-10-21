@@ -205,4 +205,54 @@ class ProxyControllerTest {
         .contains("\"detail\":")
         .contains("\"error\":\"Bad Gateway\"");
   }
+
+  // ADR-085 slice 1: one request id, end to end.
+
+  @Test
+  @DisplayName(
+      "A request without an id gets one: forwarded to the backend as X-Request-Id and echoed to the caller")
+  void requestIdIsGeneratedForwardedAndEchoed() throws Exception {
+    HttpResponse<String> response =
+        client.send(
+            HttpRequest.newBuilder(edge("/api/v1/anything")).GET().build(),
+            HttpResponse.BodyHandlers.ofString());
+
+    String forwarded = lastRequestHeaders.get("X-request-id");
+    assertThat(forwarded).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+    assertThat(response.headers().firstValue("X-Request-Id")).contains(forwarded);
+  }
+
+  @Test
+  @DisplayName(
+      "A well-formed id sent by the caller (or the platform's ingress) is kept, never replaced")
+  void wellFormedRequestIdIsKept() throws Exception {
+    HttpResponse<String> response =
+        client.send(
+            HttpRequest.newBuilder(edge("/api/v1/anything"))
+                .header("X-Request-Id", "9f1c2d3e-aaaa-bbbb-cccc-123456789abc")
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+
+    assertThat(lastRequestHeaders)
+        .containsEntry("X-request-id", "9f1c2d3e-aaaa-bbbb-cccc-123456789abc");
+    assertThat(response.headers().firstValue("X-Request-Id"))
+        .contains("9f1c2d3e-aaaa-bbbb-cccc-123456789abc");
+  }
+
+  @Test
+  @DisplayName("A malformed id (log injection, too long) is replaced by a fresh one, once")
+  void malformedRequestIdIsReplaced() throws Exception {
+    HttpResponse<String> response =
+        client.send(
+            HttpRequest.newBuilder(edge("/api/v1/anything"))
+                .header("X-Request-Id", "x".repeat(200))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+
+    String forwarded = lastRequestHeaders.get("X-request-id");
+    assertThat(forwarded).hasSize(36);
+    assertThat(response.headers().allValues("X-Request-Id")).containsExactly(forwarded);
+  }
 }
