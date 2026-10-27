@@ -255,4 +255,22 @@ class ProxyControllerTest {
     assertThat(forwarded).hasSize(36);
     assertThat(response.headers().allValues("X-Request-Id")).containsExactly(forwarded);
   }
+
+  @Test
+  @DisplayName(
+      "a client's X-Orazaka-* headers never reach a backend: identity is the token, not a header")
+  void reservedHeadersAreDropped() throws Exception {
+    client.send(
+        HttpRequest.newBuilder(edge("/api/v1/anything"))
+            .header("X-Orazaka-Principal", "{\"tenant\":\"acme\",\"roles\":[\"ROLE_HR\"]}")
+            .header("X-Orazaka-Tenant", "acme")
+            .header("X-Custom", "kept")
+            .GET()
+            .build(),
+        HttpResponse.BodyHandlers.ofString());
+
+    assertThat(lastRequestHeaders.keySet())
+        .noneMatch(name -> name.toLowerCase(java.util.Locale.ROOT).startsWith("x-orazaka-"));
+    assertThat(lastRequestHeaders.keySet()).anyMatch("X-Custom"::equalsIgnoreCase);
+  }
 }
