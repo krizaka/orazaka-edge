@@ -29,8 +29,9 @@ import org.springframework.web.client.RestClient;
  * token-by-token frames flow unbuffered for {@code text/event-stream} responses, so interactive
  * chat streaming stays synchronous through the edge (AGENTS.md §6 rule survives the migration).
  *
- * <p>Transport only: hop-by-hop headers are stripped, {@code X-Forwarded-*} is appended, status and
- * body pass through verbatim — authorization stays with the backend that owns the resource.
+ * <p>Transport only: hop-by-hop headers and the platform's reserved {@code X-Orazaka-*} headers are
+ * stripped, {@code X-Forwarded-*} is appended, status and body pass through verbatim —
+ * authorization stays with the backend that owns the resource.
  */
 @RestController
 public class ProxyController {
@@ -51,6 +52,14 @@ public class ProxyController {
           "expect",
           "host",
           "content-length");
+
+  /**
+   * Request headers the platform reserves for itself (ADR-091): whatever names an identity between
+   * services is written by a service, never by a client, so a client's copy is dropped here. Who is
+   * calling is the session token the edge forwards (or the one it exchanged an API key for), which
+   * each service verifies itself.
+   */
+  private static final String RESERVED_HEADER_PREFIX = "x-orazaka-";
 
   private static final int STREAM_BUFFER_BYTES = 8192;
 
@@ -115,7 +124,8 @@ public class ProxyController {
   private void copyRequestHeaders(HttpServletRequest request, HeaderSink sink) {
     for (String name : Collections.list(request.getHeaderNames())) {
       if (HOP_BY_HOP_HEADERS.contains(name.toLowerCase(Locale.ROOT))
-          || RequestIdFilter.HEADER.equalsIgnoreCase(name)) {
+          || RequestIdFilter.HEADER.equalsIgnoreCase(name)
+          || name.toLowerCase(Locale.ROOT).startsWith(RESERVED_HEADER_PREFIX)) {
         continue;
       }
       for (String value : Collections.list(request.getHeaders(name))) {
