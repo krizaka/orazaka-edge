@@ -51,6 +51,9 @@ orazaka:
       # The operator console's account administration (administrators only, audited by the identity service).
       - path-prefix: /api/v1/admin/users
         target: ${IDENTITY_INTERNAL_URL:http://localhost:8083}
+      # Organizations that own accounts (orazaka#372): members, the product service accounts and their keys.
+      - path-prefix: /api/v1/organizations
+        target: ${IDENTITY_INTERNAL_URL:http://localhost:8083}
       # Billing's human-facing surface (plans, pricebook, wallets, subscriptions,
       # usage). Its machine-facing one lives under /internal/v1 and is deliberately
       # NOT routed here — only /api/** reaches the edge, which is what keeps the

@@ -49,4 +49,14 @@ class EdgeRouteTableTest {
         .isEqualTo("http://localhost:8083");
     assertThat(targetOf(routes, "/api/v1/features/all")).isEqualTo("http://localhost:8080");
   }
+
+  @Test
+  @DisplayName(
+      "The organizations (members, service accounts, their keys) reach the identity service")
+  void organizationsGoToIdentity() throws IOException {
+    EdgeRoutesProperties routes = shipped();
+    assertThat(targetOf(routes, "/api/v1/organizations")).isEqualTo("http://localhost:8083");
+    assertThat(targetOf(routes, "/api/v1/organizations/org-krizaka/service-keys"))
+        .isEqualTo("http://localhost:8083");
+  }
 }
