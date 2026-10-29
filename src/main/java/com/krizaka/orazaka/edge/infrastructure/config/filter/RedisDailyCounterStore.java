@@ -5,8 +5,6 @@ import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.StatefulRedisConnection;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.Objects;
-import java.util.function.Supplier;
 
 /**
  * Daily counts in Redis, shared by every edge (ADR-083 slice 3): {@code INCR} and, on the first
@@ -27,38 +25,22 @@ final class RedisDailyCounterStore implements DailyCounterStore {
       return count
       """;
 
-  private final Supplier<StatefulRedisConnection<String, String>> connections;
-  private volatile StatefulRedisConnection<String, String> connection;
+  private final LazyRedisConnection redis;
 
   RedisDailyCounterStore(StatefulRedisConnection<String, String> connection) {
-    Objects.requireNonNull(connection, "connection cannot be null");
-    this.connection = connection;
-    this.connections = () -> connection;
+    this.redis = new LazyRedisConnection(connection);
   }
 
   RedisDailyCounterStore(RedisClient client) {
-    Objects.requireNonNull(client, "client cannot be null");
-    this.connections = client::connect;
-  }
-
-  private StatefulRedisConnection<String, String> connected() {
-    StatefulRedisConnection<String, String> current = connection;
-    if (current == null) {
-      synchronized (this) {
-        if (connection == null) {
-          connection = connections.get();
-        }
-        current = connection;
-      }
-    }
-    return current;
+    this.redis = new LazyRedisConnection(client);
   }
 
   @Override
   public long increment(String digest, LocalDate day) {
     long expireAt = day.plusDays(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond() + GRACE_SECONDS;
     return (Long)
-        connected()
+        redis
+            .get()
             .sync()
             .eval(
                 SCRIPT,

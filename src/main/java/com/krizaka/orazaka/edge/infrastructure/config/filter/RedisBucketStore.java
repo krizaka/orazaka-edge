@@ -4,7 +4,6 @@ import io.lettuce.core.RedisClient;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.StatefulRedisConnection;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Buckets in Redis, shared by every edge instance (ADR-083 slice 3). One atomic Lua script per
@@ -50,8 +49,7 @@ final class RedisBucketStore implements BucketStore {
       return {allowed, math.floor(tokens + 1e-9), retry}
       """;
 
-  private final java.util.function.Supplier<StatefulRedisConnection<String, String>> connections;
-  private volatile StatefulRedisConnection<String, String> connection;
+  private final LazyRedisConnection redis;
 
   /**
    * A store on an open connection (Lettuce reconnects it by itself after a drop).
@@ -59,9 +57,7 @@ final class RedisBucketStore implements BucketStore {
    * @param connection the connection
    */
   RedisBucketStore(StatefulRedisConnection<String, String> connection) {
-    Objects.requireNonNull(connection, "connection cannot be null");
-    this.connection = connection;
-    this.connections = () -> connection;
+    this.redis = new LazyRedisConnection(connection);
   }
 
   /**
@@ -71,27 +67,14 @@ final class RedisBucketStore implements BucketStore {
    * @param client the client
    */
   RedisBucketStore(RedisClient client) {
-    Objects.requireNonNull(client, "client cannot be null");
-    this.connections = client::connect;
-  }
-
-  private StatefulRedisConnection<String, String> connected() {
-    StatefulRedisConnection<String, String> current = connection;
-    if (current == null) {
-      synchronized (this) {
-        if (connection == null) {
-          connection = connections.get();
-        }
-        current = connection;
-      }
-    }
-    return current;
+    this.redis = new LazyRedisConnection(client);
   }
 
   @Override
   public ApiKeyRateLimiter.Decision take(String digest, int limit) {
     List<Object> answer =
-        connected()
+        redis
+            .get()
             .sync()
             .eval(
                 SCRIPT,
