@@ -51,6 +51,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- The shared limiter store (ADR-083 slice 3): Redis through Lettuce, only when ABUSE_RATE_LIMIT_STORE=redis. -->
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+        </dependency>
         <!-- Distributed tracing (Phase 0 observability baseline). -->
         <dependency>
             <groupId>io.micrometer</groupId>

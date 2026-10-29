@@ -2,8 +2,7 @@ package com.krizaka.orazaka.edge.infrastructure.config.filter;
 
 import java.time.Clock;
 import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -23,11 +22,12 @@ import org.springframework.stereotype.Component;
  * off} keeps nothing. Env {@code ABUSE_RATE_LIMIT_MODE}; {@code ABUSE_RATE_LIMIT_DEFAULT_RPM} is
  * the limit used when the identity service sends no tier.
  *
- * <p>State is in memory, per edge instance: with N instances a key may spend N times its tier. A
- * shared store (Redis, as the conversation service's bucket4j filter uses) is the move when the
- * edge scales out (ADR-083, slice 3). Keys are held as SHA-256 digests, never in clear. A full
- * table forgets idle buckets (those already refilled to capacity — forgetting them changes nothing)
- * and never flushes a busy one, so a flood cannot reset another key's debt.
+ * <p>Where the buckets live is a {@link BucketStore} (ADR-083 slice 3): in memory, per edge
+ * instance (the default — with N instances a key may spend N times its tier), or in Redis, shared
+ * by every instance ({@code ABUSE_RATE_LIMIT_STORE=redis}), so a key spends its tier once. Keys are
+ * held as SHA-256 digests, never in clear. The in-memory table forgets idle buckets (those already
+ * refilled to capacity — forgetting them changes nothing) and never flushes a busy one, so a flood
+ * cannot reset another key's debt.
  */
 @Component
 class ApiKeyRateLimiter {
@@ -61,35 +61,36 @@ class ApiKeyRateLimiter {
       boolean allowed, boolean overLimit, int limit, int remaining, long retryAfterSeconds) {}
 
   private static final int DEFAULT_MAX_KEYS = 10_000;
-  private static final double EPSILON = 1e-9;
 
   private final Mode mode;
   private final int defaultLimit;
-  private final Clock clock;
-  private final int maxKeys;
-  private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+  private final BucketStore store;
 
   @Autowired
   ApiKeyRateLimiter(
       @Value("${orazaka.edge.rate-limit.mode:${ABUSE_RATE_LIMIT_MODE:observe}}") String mode,
       @Value(
               "${orazaka.edge.rate-limit.default-requests-per-minute:${ABUSE_RATE_LIMIT_DEFAULT_RPM:600}}")
-          int defaultLimit) {
-    this(Mode.parse(mode), defaultLimit, Clock.systemUTC());
+          int defaultLimit,
+      BucketStore store) {
+    this(Mode.parse(mode), defaultLimit, store);
   }
 
   ApiKeyRateLimiter(Mode mode, int defaultLimit, Clock clock) {
-    this(mode, defaultLimit, clock, DEFAULT_MAX_KEYS);
+    this(mode, defaultLimit, new InMemoryBucketStore(clock, DEFAULT_MAX_KEYS));
   }
 
   ApiKeyRateLimiter(Mode mode, int defaultLimit, Clock clock, int maxKeys) {
+    this(mode, defaultLimit, new InMemoryBucketStore(clock, maxKeys));
+  }
+
+  ApiKeyRateLimiter(Mode mode, int defaultLimit, BucketStore store) {
     if (defaultLimit < 1) {
       throw new IllegalArgumentException("the default requests per minute must be at least 1");
     }
     this.mode = mode;
     this.defaultLimit = defaultLimit;
-    this.clock = clock;
-    this.maxKeys = maxKeys;
+    this.store = Objects.requireNonNull(store, "BucketStore cannot be null");
   }
 
   /** A limiter that never limits, for the tests that are about something else. */
@@ -116,64 +117,15 @@ class ApiKeyRateLimiter {
     if (mode == Mode.OFF) {
       return new Decision(true, false, limit, limit, 0);
     }
-    String digest = KeyDigest.of(apiKey);
-    Bucket bucket = buckets.get(digest);
-    if (bucket == null) {
-      if (buckets.size() >= maxKeys) {
-        sweepIdle();
-      }
-      bucket = buckets.computeIfAbsent(digest, k -> new Bucket(limit, clock.millis()));
-    }
-    Decision taken = bucket.take(limit, clock.millis());
+    Decision taken = store.take(KeyDigest.of(apiKey), limit);
     return mode == Mode.ENFORCE
         ? taken
         : new Decision(
             true, taken.overLimit(), taken.limit(), taken.remaining(), taken.retryAfterSeconds());
   }
 
-  /** Number of keys currently tracked. */
+  /** Number of keys currently tracked by this instance. */
   int trackedKeys() {
-    return buckets.size();
-  }
-
-  private void sweepIdle() {
-    long now = clock.millis();
-    buckets.entrySet().removeIf(e -> e.getValue().isFull(now));
-  }
-
-  /** A token bucket sized by the limit of the moment: refilled at {@code limit / 60} a second. */
-  private static final class Bucket {
-    private double tokens;
-    private long lastMillis;
-    private int limit;
-
-    Bucket(int limit, long nowMillis) {
-      this.limit = limit;
-      this.tokens = limit;
-      this.lastMillis = nowMillis;
-    }
-
-    synchronized Decision take(int newLimit, long nowMillis) {
-      refill(newLimit, nowMillis);
-      if (tokens >= 1.0 - EPSILON) {
-        tokens = Math.max(0.0, tokens - 1.0);
-        return new Decision(true, false, limit, (int) Math.floor(tokens + EPSILON), 0);
-      }
-      double millisUntilToken = (1.0 - tokens) * 60_000.0 / limit;
-      long seconds = Math.max(1L, (long) Math.ceil(millisUntilToken / 1000.0 - EPSILON));
-      return new Decision(false, true, limit, 0, seconds);
-    }
-
-    synchronized boolean isFull(long nowMillis) {
-      refill(limit, nowMillis);
-      return tokens >= limit - EPSILON;
-    }
-
-    private void refill(int newLimit, long nowMillis) {
-      long elapsed = Math.max(0L, nowMillis - lastMillis);
-      tokens = Math.min(newLimit, tokens + elapsed * (double) newLimit / 60_000.0);
-      limit = newLimit;
-      lastMillis = nowMillis;
-    }
+    return store.trackedKeys();
   }
 }
