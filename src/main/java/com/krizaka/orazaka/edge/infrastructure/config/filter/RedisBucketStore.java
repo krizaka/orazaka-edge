@@ -99,7 +99,7 @@ final class RedisBucketStore implements BucketStore {
                 new String[] {PREFIX + digest},
                 Integer.toString(limit),
                 Long.toString(TTL_MILLIS));
-    boolean allowed = ((Long) answer.get(0)) == 1L;
+    boolean allowed = ((Long) answer.getFirst()) == 1L;
     int remaining = Math.toIntExact((Long) answer.get(1));
     long retryAfter = (Long) answer.get(2);
     return allowed
