@@ -116,32 +116,8 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
       response.getWriter().write("{\"error\": \"API key scope does not allow this request\"}");
       return;
     }
-    if (rateLimiter.active()) {
-      ApiKeyRateLimiter.Decision decision =
-          rateLimiter.tryAcquire(apiKey, exchanged.requestsPerMinute());
-      response.setHeader("RateLimit-Limit", String.valueOf(decision.limit()));
-      response.setHeader("RateLimit-Remaining", String.valueOf(decision.remaining()));
-      if (decision.overLimit()) {
-        logger.warn(
-            "API key over its {} requests/minute ({}): {} {}{}",
-            decision.limit(),
-            exchanged.tierKey(),
-            request.getMethod(),
-            request.getRequestURI(),
-            decision.allowed() ? " — observed, not refused" : "");
-      }
-      if (!decision.allowed()) {
-        response.setStatus(429);
-        response.setHeader("Retry-After", String.valueOf(decision.retryAfterSeconds()));
-        response.setContentType("application/json");
-        response
-            .getWriter()
-            .write(
-                "{\"error\": \"Rate limit of this API key is reached\", \"retryAfterSeconds\": "
-                    + decision.retryAfterSeconds()
-                    + "}");
-        return;
-      }
+    if (refusedByRateLimit(request, response, apiKey, exchanged)) {
+      return;
     }
     if (!quota.tryAcquire(apiKey)) {
       logger.warn(
@@ -154,6 +130,44 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
     }
     filterChain.doFilter(
         new AuthorizationRewriter(request, BEARER_PREFIX + exchanged.token()), response);
+  }
+
+  /** Applies the per-minute limit of the key; {@code true} when the request was answered 429 here. */
+  private boolean refusedByRateLimit(
+      HttpServletRequest request,
+      HttpServletResponse response,
+      String apiKey,
+      ExchangeResponse exchanged)
+      throws IOException {
+    if (!rateLimiter.active()) {
+      return false;
+    }
+    ApiKeyRateLimiter.Decision decision =
+        rateLimiter.tryAcquire(apiKey, exchanged.requestsPerMinute());
+    response.setHeader("RateLimit-Limit", String.valueOf(decision.limit()));
+    response.setHeader("RateLimit-Remaining", String.valueOf(decision.remaining()));
+    if (decision.overLimit()) {
+      logger.warn(
+          "API key over its {} requests/minute ({}): {} {}{}",
+          decision.limit(),
+          exchanged.tierKey(),
+          request.getMethod(),
+          request.getRequestURI(),
+          decision.allowed() ? " — observed, not refused" : "");
+    }
+    if (!decision.allowed()) {
+      response.setStatus(429);
+      response.setHeader("Retry-After", String.valueOf(decision.retryAfterSeconds()));
+      response.setContentType("application/json");
+      response
+          .getWriter()
+          .write(
+              "{\"error\": \"Rate limit of this API key is reached\", \"retryAfterSeconds\": "
+                  + decision.retryAfterSeconds()
+                  + "}");
+      return true;
+    }
+    return false;
   }
 
   /** Exchanges an API key for a session JWT; {@code null} when the key is invalid/revoked. */
