@@ -132,7 +132,7 @@ class ApiKeyExchangeFilter extends OncePerRequestFilter {
         new AuthorizationRewriter(request, BEARER_PREFIX + exchanged.token()), response);
   }
 
-  /** Applies the per-minute limit of the key; {@code true} when the request was answered 429 here. */
+  /** Applies the key's per-minute limit; {@code true} when the request was answered 429. */
   private boolean refusedByRateLimit(
       HttpServletRequest request,
       HttpServletResponse response,
