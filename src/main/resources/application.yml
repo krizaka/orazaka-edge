@@ -33,6 +33,10 @@ orazaka:
     rate-limit:
       mode: ${ABUSE_RATE_LIMIT_MODE:observe}
       default-requests-per-minute: ${ABUSE_RATE_LIMIT_DEFAULT_RPM:600}
+      # Where the buckets and the daily counts live: memory (one edge, the default) or redis (shared by every
+      # instance — a key spends its tier once, not once per edge). A Redis that fails is bypassed, never fatal.
+      store: ${ABUSE_RATE_LIMIT_STORE:memory}
+      redis-url: ${ABUSE_RATE_LIMIT_REDIS_URL:redis://localhost:6379}
     routes:
       - path-prefix: /
         target: ${ROUTER_INTERNAL_URL:http://localhost:8080}

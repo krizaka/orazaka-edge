@@ -20,6 +20,6 @@ concurrency:
 
 jobs:
   smoke:
-    uses: krizaka/orazaka/.github/workflows/load-smoke.yml@7e70e89478ab174a2c3b9c793f1ff80754e93ce3 # main
+    uses: krizaka/orazaka/.github/workflows/load-smoke.yml@7811f56c86053a9dfd68cd871d8e7102c9b527bb # main
     with:
       component: orazaka-edge
