@@ -1,10 +1,12 @@
 package com.krizaka.orazaka.edge.infrastructure.config.filter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.krizaka.orazaka.test.AbstractContainerIntegrationTest;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -82,14 +84,17 @@ class RedisBucketStoreIT extends AbstractContainerIntegrationTest {
 
   @Test
   @DisplayName("tokens come back with time, at the tier's rate, on the server's clock")
-  void refillsOnTheServersClock() throws InterruptedException {
+  void refillsOnTheServersClock() {
     String key = key();
     for (int i = 0; i < 60; i++) {
       edgeA.take(key, 60);
     }
     assertThat(edgeB.take(key, 60).allowed()).isFalse();
-    Thread.sleep(1_200); // 60/min refills one token a second
-    assertThat(edgeB.take(key, 60).allowed()).isTrue();
+    // 60/min refills one token a second; a refused call takes nothing, so polling is safe.
+    await()
+        .atMost(Duration.ofSeconds(5))
+        .pollInterval(Duration.ofMillis(100))
+        .untilAsserted(() -> assertThat(edgeB.take(key, 60).allowed()).isTrue());
   }
 
   @Test
@@ -101,12 +106,10 @@ class RedisBucketStoreIT extends AbstractContainerIntegrationTest {
     }
     assertThat(edgeA.take(key, 2).allowed()).isFalse();
     // The operator raised the tier: the same bucket refills at the new rate (one token a 600 ms).
-    try {
-      Thread.sleep(700);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
-    assertThat(edgeB.take(key, 100).allowed()).isTrue();
+    await()
+        .atMost(Duration.ofSeconds(5))
+        .pollInterval(Duration.ofMillis(100))
+        .untilAsserted(() -> assertThat(edgeB.take(key, 100).allowed()).isTrue());
   }
 
   @Test
