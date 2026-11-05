@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.Collections;
@@ -106,7 +105,7 @@ public class ProxyController {
       }
     } catch (UncheckedIOException e) {
       // Client disconnected mid-stream (SSE tab closed) — nothing left to relay.
-      logger.debug("Client stream closed for {} {}", request.getMethod(), target);
+      logger.debug("client closed the stream for {} {}", request.getMethod(), target);
     }
   }
 
@@ -162,15 +161,28 @@ public class ProxyController {
               }
             });
     try (InputStream in = clientResponse.getBody()) {
-      OutputStream out = response.getOutputStream();
       byte[] buffer = new byte[STREAM_BUFFER_BYTES];
       int read;
       while ((read = in.read(buffer)) != -1) {
-        out.write(buffer, 0, read);
-        // Unbuffered relay: each upstream chunk (an SSE frame, a token) reaches the
-        // client immediately instead of waiting for the response buffer to fill.
-        response.flushBuffer();
+        writeToClient(response, buffer, read);
       }
+    }
+  }
+
+  /**
+   * Writes one upstream chunk to the client. A failure here is the client leaving (a closed tab, a
+   * Broken pipe), not the backend: it is raised as {@link UncheckedIOException} so the exchange
+   * does not wrap it as a {@code ResourceAccessException} and the caller does not report the
+   * backend as unreachable (krizaka-internal#2597).
+   */
+  private static void writeToClient(HttpServletResponse response, byte[] buffer, int length) {
+    try {
+      response.getOutputStream().write(buffer, 0, length);
+      // Unbuffered relay: each upstream chunk (an SSE frame, a token) reaches the
+      // client immediately instead of waiting for the response buffer to fill.
+      response.flushBuffer();
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
     }
   }
 
