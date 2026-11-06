@@ -1,7 +1,7 @@
 package com.krizaka.sovkora.edge.infrastructure.config.filter;
 
-import com.krizaka.sovkora.edge.infrastructure.config.EdgeIdentityProperties;
 import com.krizaka.security.token.ServiceTokenProvider;
+import com.krizaka.sovkora.edge.infrastructure.config.EdgeIdentityProperties;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

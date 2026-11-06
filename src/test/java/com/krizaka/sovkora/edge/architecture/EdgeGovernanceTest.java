@@ -18,8 +18,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Governance guardrails for the sovkora-edge-service module: the edge is a transport-only strangler facade
- * — it must never wire the framework libraries or grow business logic.
+ * Governance guardrails for the sovkora-edge-service module: the edge is a transport-only strangler
+ * facade — it must never wire the framework libraries or grow business logic.
  */
 class EdgeGovernanceTest {
 
