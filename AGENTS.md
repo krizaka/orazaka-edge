@@ -1,16 +1,16 @@
-# orazaka-edge — Governance scope (agent-neutral)
+# sovkora-edge-service — Governance scope (agent-neutral)
 
-> This repository is one component of the **Orazaka platform**. The normative contract is
-> [`AGENTS.md`](https://github.com/krizaka/orazaka/blob/main/AGENTS.md) at the root of the Orazaka workspace
-> ([`krizaka/orazaka`](https://github.com/krizaka/orazaka)), together with its `.agent/rules/*`. When this repository
+> This repository is one component of the **Sovkora platform**. The normative contract is
+> [`AGENTS.md`](https://github.com/krizaka/sovkora/blob/main/AGENTS.md) at the root of the Sovkora workspace
+> ([`krizaka/sovkora`](https://github.com/krizaka/sovkora)), together with its `.agent/rules/*`. When this repository
 > is cloned inside the workspace (`orazaka-apps/services/orazaka-edge`), that contract is loaded first and applies
 > without exception. **No rule lives here** — this file only scopes it.
 
 ## Scope of this repository
 
-- **Role:** Transparent HTTP edge in front of every Orazaka service: routing, API-key → JWT exchange, CORS and tracing. Spring MVC + virtual threads.
+- **Role:** Transparent HTTP edge in front of every Sovkora service: routing, API-key → JWT exchange, CORS and tracing. Spring MVC + virtual threads.
 - **Layer:** Foundation — reusable by any Krizaka application
-- **Depends on:** orazaka-build — never on another repository's Tier-3 implementation (AGENTS.md §2, [SEAM-002]).
+- **Depends on:** sovkora-build — never on another repository's Tier-3 implementation (AGENTS.md §2, [SEAM-002]).
 - **Workspace path:** `orazaka-apps/services/orazaka-edge`
 
 ## Static rules & codemods (OpenRewrite, ArchUnit)
@@ -32,7 +32,7 @@ The org code rules (addendum 2026-10-15) are checked by tools, not by review.
   `archunit_store/` (committed); a **new** violation fails, a fixed one leaves the store (commit it). A rule with no store
   fails: record a new rule's debt once with `-Darchunit.freeze.store.default.allowStoreCreation=true`, review the store,
   commit it. Never add a violation to a store by hand to get a build green.
-- A rule never passes over nothing (no `allowEmptyShould`, Orazaka GOV-006): a module applies the rules whose subject it has (a library without controllers does not apply the controller naming rule).
+- A rule never passes over nothing (no `allowEmptyShould`, Sovkora GOV-006): a module applies the rules whose subject it has (a library without controllers does not apply the controller naming rule).
 - A rule is never weakened, skipped or deleted to get a PR green (AGENTS §5.3 of the org); fix the code or freeze the existing debt.
 
 ## Definition of done
@@ -43,7 +43,7 @@ The org code rules (addendum 2026-10-15) are checked by tools, not by review.
 3. Spotless (google-java-format) passes — it is bound to `validate`.
 4. The change ships with its tests — a unit test for logic, a Testcontainers integration test for an adapter, an
    endpoint or a flow; a fix starts with a failing test that reproduces the bug. CI runs them and must be green; no
-   test = not done (workspace [`AGENTS.md` §9](https://github.com/krizaka/orazaka/blob/main/AGENTS.md#9-testing)).
+   test = not done (workspace [`AGENTS.md` §9](https://github.com/krizaka/sovkora/blob/main/AGENTS.md#9-testing)).
 
 **Repository layout:** the root follows [krizaka/.github `docs/standards/repo-layout.md`](https://github.com/krizaka/.github/blob/main/docs/standards/repo-layout.md); the CI guard `check-repo-layout` fails on a stray root file, and a justified extra is declared in `.repo-layout.json` with its why.
 

@@ -1,6 +1,6 @@
 # The edge's smoke-level load test (ADR-083): builds this commit, puts stand-in services behind it and runs
 # the k6 contract (429 + Retry-After, Idempotency-Key, SSE relay) and the SLO thresholds. The pipeline lives in
-# krizaka/orazaka so every caller measures the same way; it is not a required check.
+# krizaka/sovkora so every caller measures the same way; it is not a required check.
 name: load-smoke
 
 on:
@@ -20,6 +20,6 @@ concurrency:
 
 jobs:
   smoke:
-    uses: krizaka/orazaka/.github/workflows/load-smoke.yml@7811f56c86053a9dfd68cd871d8e7102c9b527bb # main
+    uses: krizaka/sovkora/.github/workflows/load-smoke.yml@7811f56c86053a9dfd68cd871d8e7102c9b527bb # main
     with:
       component: orazaka-edge

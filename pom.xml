@@ -5,27 +5,27 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.krizaka.orazaka</groupId>
-        <artifactId>orazaka-parent</artifactId>
+        <groupId>com.krizaka.sovkora</groupId>
+        <artifactId>sovkora-parent</artifactId>
         <version>1.0.0-SNAPSHOT</version>
-        <relativePath>../../../orazaka-libs/orazaka-build/orazaka-parent/pom.xml</relativePath>
+        <relativePath>../../../sovkora-libs/sovkora-build/sovkora-parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>orazaka-edge</artifactId>
-    <name>orazaka-edge</name>
-    <description>Orazaka Edge Gateway — strangler facade: route table + streaming reverse proxy (transport only, no business logic)</description>
+    <artifactId>sovkora-edge-service</artifactId>
+    <name>sovkora-edge-service</name>
+    <description>Sovkora Edge Gateway — strangler facade: route table + streaming reverse proxy (transport only, no business logic)</description>
 
-    <url>https://github.com/krizaka/orazaka-edge</url>
+    <url>https://github.com/krizaka/sovkora-edge-service</url>
 
     <scm>
-        <url>https://github.com/krizaka/orazaka-edge</url>
-        <connection>scm:git:https://github.com/krizaka/orazaka-edge.git</connection>
-        <developerConnection>scm:git:git@github.com:krizaka/orazaka-edge.git</developerConnection>
+        <url>https://github.com/krizaka/sovkora-edge-service</url>
+        <connection>scm:git:https://github.com/krizaka/sovkora-edge-service.git</connection>
+        <developerConnection>scm:git:git@github.com:krizaka/sovkora-edge-service.git</developerConnection>
     </scm>
 
     <properties>
-        <!-- GitHub Packages repository this artifact is published to (orazaka-parent). -->
-        <orazaka.repository>orazaka-edge</orazaka.repository>
+        <!-- GitHub Packages repository this artifact is published to (sovkora-parent). -->
+        <sovkora.repository>sovkora-edge-service</sovkora.repository>
     </properties>
 
 
@@ -73,8 +73,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.krizaka.orazaka</groupId>
-            <artifactId>orazaka-test-support</artifactId>
+            <groupId>com.krizaka.sovkora</groupId>
+            <artifactId>sovkora-test-support</artifactId>
         </dependency>
         <dependency>
             <groupId>com.tngtech.archunit</groupId>
